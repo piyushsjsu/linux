@@ -1493,8 +1493,17 @@ bool kvm_cpuid(struct kvm_vcpu *vcpu, u32 *eax, u32 *ebx,
 }
 EXPORT_SYMBOL_GPL(kvm_cpuid);
 
+atomic_t total_exits_count = ATOMIC_INIT(0);
+
+EXPORT_SYMBOL(total_exits_count);
+
+atomic64_t total_cycles_count = ATOMIC64_INIT(0);
+
+EXPORT_SYMBOL(total_cycles_count);
+
 int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 {
+	uint64_t total_cycles;
 	u32 eax, ebx, ecx, edx;
 
 	if (cpuid_fault_enabled(vcpu) && !kvm_require_cpl(vcpu, 0))
@@ -1502,7 +1511,19 @@ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 
 	eax = kvm_rax_read(vcpu);
 	ecx = kvm_rcx_read(vcpu);
-	kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, false);
+	switch(eax){
+		case 0x4FFFFFFC:
+			eax = arch_atomic_read(&total_exits_count);
+			break;
+		case 0x4FFFFFFD:
+			total_cycles = arch_atomic64_read(&total_cycles_count);
+			ebx = (total_cycles >> 32);
+			ecx = (total_cycles & 0xFFFFFFFF);
+			break;
+		default:
+			kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, false);
+	}
+	
 	kvm_rax_write(vcpu, eax);
 	kvm_rbx_write(vcpu, ebx);
 	kvm_rcx_write(vcpu, ecx);
